@@ -380,6 +380,7 @@ async function createGame() {
   const code = randomGameCode();
   await setDoc(gameDocRef(code), {
     createdAt: serverTimestamp(),
+    hostUid: auth.currentUser?.uid || null,
     currentWord: "Press New Word",
     wordUpdatedAt: serverTimestamp(),
     reveal: true
