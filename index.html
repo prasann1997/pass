@@ -63,14 +63,26 @@
         <button id="btnClearLocal" class="danger secondary">Clear Local Custom</button>
       </div>
 
-      <div class="actions">
-        <button id="btnReveal" class="secondary">Reveal/Hide</button>
-        <button id="btnNewWord">New Word</button>
-        <button id="btnCorrect" class="good">Correct ✅</button>
-        <button id="btnSkip" class="danger">Skip / Incorrect ➜</button>
-      </div>
+        <div class="actions">
+          <button id="btnReveal" class="secondary">Reveal/Hide</button>
+          <button id="btnNewWord">New Word</button>
+          <button id="btnCorrect" class="good">Correct ✅</button>
+          <button id="btnSkip" class="danger">Skip / Incorrect ➜</button>
+        </div>
 
-      <div class="muted small" id="turnInfo" style="margin-top:8px;"></div>
+        <div class="info-grid">
+          <div class="info-card">
+            <div class="label">Active Team</div>
+            <div class="info-value" id="activeTeamDisplay">—</div>
+          </div>
+          <div class="info-card">
+            <div class="label">Turn Timer</div>
+            <div class="info-value" id="turnTimer">00:30</div>
+            <div class="muted small" id="timerStatus"></div>
+          </div>
+        </div>
+
+        <div class="muted small" id="turnInfo" style="margin-top:8px;"></div>
       
       <p class="muted small">
         Word changes sync to everyone in this game.
