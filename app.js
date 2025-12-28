@@ -79,6 +79,7 @@ let teamsById = new Map();
 let lastAutoSkipKey = null;
 let turnPaused = false;
 let pausedRemainingMs = null;
+let lastWordUpdatedAt = null;
 
 // ---------- Helpers ----------
 function randomGameCode() {
@@ -206,6 +207,7 @@ function unsubscribeAll() {
 function subscribeToGame(code) {
   unsubscribeAll();
   gameId = code;
+  lastWordUpdatedAt = null;
   elGameCode.textContent = code || "—";
 
   if (!code) {
@@ -266,12 +268,23 @@ function subscribeToGame(code) {
       } else {
 	  turnInfo.textContent = "Picking a team...";
       }
-    currentReveal = data.reveal !== false;
-    const w = data.currentWord || "—";
-    wordDisplay.textContent = currentReveal ? w : "••••••";
-    const t = data.wordUpdatedAt ? `Updated ${fmtTime(data.wordUpdatedAt)}` : "";
-    wordMeta.textContent = t;
-    btnReveal.textContent = currentReveal ? "Hide" : "Reveal";
+    const updatedAt = data.wordUpdatedAt
+      ? (typeof data.wordUpdatedAt.toDate === "function" ? data.wordUpdatedAt.toDate() : new Date(data.wordUpdatedAt))
+      : null;
+
+    // Ignore older snapshots that would reapply a stale word when Firestore replays
+    // cached data after a write. This prevents the UI from flashing the new word
+    // and then reverting to the previous one when offline/latency updates arrive.
+    if (!lastWordUpdatedAt || (updatedAt && updatedAt >= lastWordUpdatedAt)) {
+      lastWordUpdatedAt = updatedAt || lastWordUpdatedAt;
+
+      currentReveal = data.reveal !== false;
+      const w = data.currentWord || "—";
+      wordDisplay.textContent = currentReveal ? w : "••••••";
+      const t = updatedAt ? `Updated ${fmtTime(data.wordUpdatedAt)}` : "";
+      wordMeta.textContent = t;
+      btnReveal.textContent = currentReveal ? "Hide" : "Reveal";
+    }
     updateTurnDisplays();
   });
 
