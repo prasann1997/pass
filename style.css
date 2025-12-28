@@ -228,3 +228,18 @@ button.danger{
   padding: 10px 12px;
   border-radius: 999px;
 }
+
+.team.active{
+  border: 3px solid rgba(255,79,179,.55);
+  box-shadow: 0 0 0 6px rgba(255,79,179,.12), 0 10px 18px rgba(42,35,70,.10);
+  transform: translateY(-1px);
+}
+.badge{
+  display:inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-weight: 900;
+  background: rgba(85,193,255,.18);
+  border: 2px solid rgba(85,193,255,.30);
+  margin-left: 8px;
+}

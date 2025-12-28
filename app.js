@@ -29,6 +29,9 @@ const btnCreate = document.getElementById("btnCreate");
 const btnCopyLink = document.getElementById("btnCopyLink");
 const joinInput = document.getElementById("joinInput");
 const btnJoin = document.getElementById("btnJoin");
+const btnCorrect = document.getElementById("btnCorrect");
+const btnSkip = document.getElementById("btnSkip");
+const turnInfo = document.getElementById("turnInfo");
 
 const wordDisplay = document.getElementById("wordDisplay");
 const wordMeta = document.getElementById("wordMeta");
@@ -58,6 +61,13 @@ let gameId = getGameIdFromURL();
 let unsubGame = null;
 let unsubTeams = null;
 let currentReveal = true;
+let activeTeamId = null;
+let offeredPoints = 0;
+let roundActive = false;
+let turnIndex = 0;
+let turnOrder = [];
+let attemptedTeamIds = [];
+let solvedByTeamId = null;
 
 // ---------- Helpers ----------
 function randomGameCode() {
@@ -163,6 +173,24 @@ function subscribeToGame(code) {
       return;
     }
     const data = snap.data();
+
+      roundActive = !!data.roundActive;
+      activeTeamId = data.activeTeamId || null;
+      offeredPoints = data.offeredPoints ?? 0;
+      turnIndex = data.turnIndex ?? 0;
+      turnOrder = Array.isArray(data.turnOrder) ? data.turnOrder : [];
+      attemptedTeamIds = Array.isArray(data.attemptedTeamIds) ? data.attemptedTeamIds : [];
+      solvedByTeamId = data.solvedByTeamId || null;
+
+      if (!roundActive) {
+	  turnInfo.textContent = "Round inactive. Hit “New Word” to start.";
+      } else if (solvedByTeamId) {
+	  turnInfo.textContent = `Solved! Points awarded. Hit “New Word” for the next round.`;
+      } else if (activeTeamId) {
+	  turnInfo.textContent = `Active team’s turn • Worth ${offeredPoints} points`;
+      } else {
+	  turnInfo.textContent = "Picking a team...";
+      }
     currentReveal = data.reveal !== false;
     const w = data.currentWord || "—";
     wordDisplay.textContent = currentReveal ? w : "••••••";
@@ -188,7 +216,15 @@ function renderTeams(teams) {
   teamsList.innerHTML = "";
   for (const t of teams) {
     const wrap = document.createElement("div");
-    wrap.className = "team";
+    //wrap.className = "team";
+    wrap.className = "team" + (t.id === activeTeamId ? " active" : "");
+
+    if (t.id === activeTeamId && roundActive && !solvedByTeamId) {
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.textContent = `TURN • ${offeredPoints} pts`;
+      name.appendChild(badge);
+    }
 
     const left = document.createElement("div");
     left.style.minWidth = "0";
@@ -267,10 +303,118 @@ async function joinGame(code) {
 async function setNewWord() {
   if (!gameId) return alert("Create or join a game first.");
   await ensureSignedIn();
+
+  // Load teams, sort by score asc; ties random
+  const { getDocs } = await import("https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js");
+  const qs = await getDocs(teamsColRef(gameId));
+  const teams = [];
+  qs.forEach(d => teams.push({ id: d.id, ...d.data() }));
+
+  if (teams.length < 2) return alert("Add at least 2 teams.");
+
+  // Group by score to randomize ties
+  teams.sort((a,b) => (a.score ?? 0) - (b.score ?? 0) || a.id.localeCompare(b.id));
+  // randomize within equal-score runs
+  for (let i = 0; i < teams.length; ) {
+    let j = i + 1;
+    while (j < teams.length && (teams[j].score ?? 0) === (teams[i].score ?? 0)) j++;
+    // shuffle slice [i, j)
+    for (let k = j - 1; k > i; k--) {
+      const r = i + Math.floor(Math.random() * (k - i + 1));
+      [teams[k], teams[r]] = [teams[r], teams[k]];
+    }
+    i = j;
+  }
+
+  const order = teams.map(t => t.id);
+  const firstTeamId = order[0];
+
   await updateDoc(gameDocRef(gameId), {
     currentWord: pickWord(),
     wordUpdatedAt: serverTimestamp(),
-    reveal: true
+    reveal: true,
+
+    // round fields
+    roundActive: true,
+    solvedByTeamId: null,
+    turnOrder: order,
+    turnIndex: 0,
+    activeTeamId: firstTeamId,
+    offeredPoints: 10,
+    attemptedTeamIds: []
+  });
+}
+
+async function skipOrIncorrect() {
+  if (!gameId) return;
+  await ensureSignedIn();
+
+  await runTransaction(db, async (tx) => {
+    const gref = gameDocRef(gameId);
+    const gsnap = await tx.get(gref);
+    if (!gsnap.exists()) return;
+
+    const g = gsnap.data();
+    if (!g.roundActive || g.solvedByTeamId) return;
+
+    const order = Array.isArray(g.turnOrder) ? g.turnOrder : [];
+    const idx = g.turnIndex ?? 0;
+    const pts = g.offeredPoints ?? 10;
+    const curTeam = g.activeTeamId;
+
+    if (!order.length) return;
+
+    const attempted = Array.isArray(g.attemptedTeamIds) ? g.attemptedTeamIds : [];
+    const nextAttempted = curTeam ? [...new Set([...attempted, curTeam])] : attempted;
+
+    const nextIdx = Math.min(idx + 1, order.length - 1);
+    const nextTeamId = order[nextIdx];
+
+    // points: 10 -> 9 -> 8 ... clamp to 1
+    const nextPts = Math.max(1, pts - 1);
+
+    // If we're already at the last team and they skip too, you can decide what happens.
+    // Here: just stay on last team but keep pts at 1.
+    const stuckAtEnd = idx >= order.length - 1;
+    tx.update(gref, {
+      attemptedTeamIds: nextAttempted,
+      turnIndex: stuckAtEnd ? idx : nextIdx,
+      activeTeamId: stuckAtEnd ? curTeam : nextTeamId,
+      offeredPoints: stuckAtEnd ? Math.max(1, pts) : nextPts
+    });
+  });
+}
+
+async function markCorrect() {
+  if (!gameId) return;
+  await ensureSignedIn();
+
+  await runTransaction(db, async (tx) => {
+    const gref = gameDocRef(gameId);
+    const gsnap = await tx.get(gref);
+    if (!gsnap.exists()) return;
+
+    const g = gsnap.data();
+    if (!g.roundActive || g.solvedByTeamId) return;
+
+    const teamId = g.activeTeamId;
+    const pts = Math.max(1, g.offeredPoints ?? 10);
+    if (!teamId) return;
+
+    const tref = doc(db, "games", gameId, "teams", teamId);
+    const tsnap = await tx.get(tref);
+    if (!tsnap.exists()) return;
+
+    const curScore = tsnap.data().score ?? 0;
+
+    // award points
+    tx.update(tref, { score: curScore + pts });
+
+    // close round
+    tx.update(gref, {
+      solvedByTeamId: teamId,
+      roundActive: false
+    });
   });
 }
 
@@ -350,6 +494,9 @@ function clearLocalCustom() {
 }
 
 // ---------- Wire up ----------
+btnSkip.onclick = skipOrIncorrect;
+btnCorrect.onclick = markCorrect;
+
 btnCreate.onclick = createGame;
 btnCopyLink.onclick = async () => {
   if (!gameId) return alert("Create or join a game first.");

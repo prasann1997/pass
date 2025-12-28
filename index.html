@@ -9,7 +9,7 @@
 <body>
   <header class="container">
     <h1>Password Game</h1>
-    <p class="muted">Realtime shared scoreboard (GitHub Pages + Firebase)</p>
+    <p class="muted">Ironwood Games</p>
   </header>
 
   <main class="container grid">
@@ -63,6 +63,15 @@
         <button id="btnClearLocal" class="danger secondary">Clear Local Custom</button>
       </div>
 
+      <div class="actions">
+        <button id="btnReveal" class="secondary">Reveal/Hide</button>
+        <button id="btnNewWord">New Word</button>
+        <button id="btnCorrect" class="good">Correct ✅</button>
+        <button id="btnSkip" class="danger">Skip / Incorrect ➜</button>
+      </div>
+
+      <div class="muted small" id="turnInfo" style="margin-top:8px;"></div>
+      
       <p class="muted small">
         Word changes sync to everyone in this game.
       </p>
