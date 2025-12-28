@@ -189,10 +189,8 @@ button.danger{
 .team .name{
   font-weight: 900;
   font-size: 18px;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-  max-width: 55%;
+  overflow:visible;
+  white-space:normal;
 }
 
 .team .score{

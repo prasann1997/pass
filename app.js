@@ -165,7 +165,7 @@ function updateCountdownUI(msLeft) {
 function updateTurnDisplays() {
   const teamName = activeTeamId && teamsById.has(activeTeamId)
     ? (teamsById.get(activeTeamId).name || "(unnamed)")
-    : "—";
+    : (activeTeamId || "—");
   activeTeamDisplay.textContent = roundActive ? teamName : "—";
   updateCountdownUI();
 }
@@ -213,7 +213,15 @@ function subscribeToGame(code) {
       turnOrder = Array.isArray(data.turnOrder) ? data.turnOrder : [];
       attemptedTeamIds = Array.isArray(data.attemptedTeamIds) ? data.attemptedTeamIds : [];
       solvedByTeamId = data.solvedByTeamId || null;
-      turnDeadline = data.turnEndsAt ? data.turnEndsAt.toDate() : null;
+
+      // Allow either Firestore Timestamp objects or plain millisecond numbers
+      // so countdown keeps running even if the field was serialized differently.
+      const rawDeadline = data.turnEndsAt;
+      turnDeadline = rawDeadline
+        ? (typeof rawDeadline.toDate === "function"
+            ? rawDeadline.toDate()
+            : new Date(rawDeadline))
+        : null;
 
       if (!roundActive) {
           turnInfo.textContent = "Round inactive. Hit “New Word” to start.";
