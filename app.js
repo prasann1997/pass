@@ -48,18 +48,12 @@ const btnAddTeam = document.getElementById("btnAddTeam");
 const teamsList = document.getElementById("teamsList");
 const btnResetScores = document.getElementById("btnResetScores");
 
-const customWordsEl = document.getElementById("customWords");
-const btnSaveCustom = document.getElementById("btnSaveCustom");
-const btnClearLocal = document.getElementById("btnClearLocal");
-
 // ---------- Local-only word list ----------
 const BUILTIN_WORDS = [
   "apple","bridge","castle","doctor","river","planet","shadow","rocket","thunder","window",
   "camera","pencil","whisper","jungle","marble","pirate","ladder","ocean","pillow","dragon",
   "guitar","forest","diamond","painter","volcano","butter","wallet","cactus","tunnel","garden"
 ];
-
-const LOCAL_KEY_CUSTOM = "pw_custom_words_v1";
 
 // ---------- Game state ----------
 let gameId = getGameIdFromURL();
@@ -105,41 +99,8 @@ function getGameIdFromURL() {
   return sanitizeCode(url.searchParams.get("game") || "");
 }
 
-function normalizeWords(lines) {
-  const seen = new Set();
-  const out = [];
-  for (const line of lines) {
-    const w = line.trim();
-    if (!w) continue;
-    const k = w.toLowerCase();
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push(w);
-  }
-  return out;
-}
-
-function getCustomWords() {
-  try {
-    const raw = localStorage.getItem(LOCAL_KEY_CUSTOM);
-    if (!raw) return [];
-    return normalizeWords(JSON.parse(raw));
-  } catch { return []; }
-}
-
-function setCustomWords(words) {
-  localStorage.setItem(LOCAL_KEY_CUSTOM, JSON.stringify(words));
-}
-
-function wordPool() {
-  const custom = getCustomWords();
-  return normalizeWords([...BUILTIN_WORDS, ...custom]);
-}
-
 function pickWord() {
-  const pool = wordPool();
-  if (pool.length === 0) return "NO_WORDS";
-  return pool[Math.floor(Math.random() * pool.length)];
+  return BUILTIN_WORDS[Math.floor(Math.random() * BUILTIN_WORDS.length)];
 }
 
 function fmtTime(ts) {
@@ -645,23 +606,6 @@ async function resetScores() {
   await Promise.all(promises);
 }
 
-// ---------- Local custom words ----------
-function loadCustomIntoUI() {
-  customWordsEl.value = getCustomWords().join("\n");
-}
-
-function saveCustomFromUI() {
-  const words = normalizeWords(customWordsEl.value.split("\n"));
-  setCustomWords(words);
-  alert("Saved custom words locally on this device.");
-}
-
-function clearLocalCustom() {
-  if (!confirm("Clear local custom words on this device?")) return;
-  setCustomWords([]);
-  loadCustomIntoUI();
-}
-
 // ---------- Wire up ----------
 btnSkip.onclick = skipOrIncorrect;
 btnCorrect.onclick = markCorrect;
@@ -683,9 +627,6 @@ teamName.addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); addTeam(); }
 });
 btnResetScores.onclick = resetScores;
-
-btnSaveCustom.onclick = saveCustomFromUI;
-btnClearLocal.onclick = clearLocalCustom;
 
 setInterval(() => {
   const msLeft = turnDeadline ? turnDeadline.getTime() - Date.now() : null;
@@ -710,7 +651,6 @@ onAuthStateChanged(auth, async () => {
   } else {
     subscribeToGame("");
   }
-  loadCustomIntoUI();
 });
 
 // Notes:
