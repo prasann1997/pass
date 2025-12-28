@@ -32,6 +32,9 @@ const btnJoin = document.getElementById("btnJoin");
 const btnCorrect = document.getElementById("btnCorrect");
 const btnSkip = document.getElementById("btnSkip");
 const turnInfo = document.getElementById("turnInfo");
+const activeTeamDisplay = document.getElementById("activeTeamDisplay");
+const turnTimerEl = document.getElementById("turnTimer");
+const timerStatusEl = document.getElementById("timerStatus");
 
 const wordDisplay = document.getElementById("wordDisplay");
 const wordMeta = document.getElementById("wordMeta");
@@ -68,6 +71,9 @@ let turnIndex = 0;
 let turnOrder = [];
 let attemptedTeamIds = [];
 let solvedByTeamId = null;
+let turnDeadline = null;
+let teamsById = new Map();
+let lastAutoSkipKey = null;
 
 // ---------- Helpers ----------
 function randomGameCode() {
@@ -138,6 +144,32 @@ function fmtTime(ts) {
   }
 }
 
+function updateCountdownUI(msLeft) {
+  if (!roundActive || !activeTeamId || !turnDeadline) {
+    turnTimerEl.textContent = "—";
+    timerStatusEl.textContent = roundActive ? "Waiting for turn..." : "Timer idle.";
+    return;
+  }
+
+  const remaining = Math.max(0, msLeft ?? (turnDeadline.getTime() - Date.now()));
+  const totalSeconds = Math.floor(remaining / 1000);
+  const mins = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+  const secs = String(totalSeconds % 60).padStart(2, "0");
+
+  turnTimerEl.textContent = `${mins}:${secs}`;
+  timerStatusEl.textContent = remaining <= 0
+    ? "Time's up! Auto-skipping..."
+    : "Turns auto-skip after 30s.";
+}
+
+function updateTurnDisplays() {
+  const teamName = activeTeamId && teamsById.has(activeTeamId)
+    ? (teamsById.get(activeTeamId).name || "(unnamed)")
+    : "—";
+  activeTeamDisplay.textContent = roundActive ? teamName : "—";
+  updateCountdownUI();
+}
+
 // ---------- Firestore paths ----------
 function gameDocRef(code) { return doc(db, "games", code); }
 function teamsColRef(code) { return collection(db, "games", code, "teams"); }
@@ -181,11 +213,12 @@ function subscribeToGame(code) {
       turnOrder = Array.isArray(data.turnOrder) ? data.turnOrder : [];
       attemptedTeamIds = Array.isArray(data.attemptedTeamIds) ? data.attemptedTeamIds : [];
       solvedByTeamId = data.solvedByTeamId || null;
+      turnDeadline = data.turnEndsAt ? data.turnEndsAt.toDate() : null;
 
       if (!roundActive) {
-	  turnInfo.textContent = "Round inactive. Hit “New Word” to start.";
+          turnInfo.textContent = "Round inactive. Hit “New Word” to start.";
       } else if (solvedByTeamId) {
-	  turnInfo.textContent = `Solved! Points awarded. Hit “New Word” for the next round.`;
+          turnInfo.textContent = `Solved! Points awarded. Hit “New Word” for the next round.`;
       } else if (activeTeamId) {
 	  turnInfo.textContent = `Active team’s turn • Worth ${offeredPoints} points`;
       } else {
@@ -197,6 +230,7 @@ function subscribeToGame(code) {
     const t = data.wordUpdatedAt ? `Updated ${fmtTime(data.wordUpdatedAt)}` : "";
     wordMeta.textContent = t;
     btnReveal.textContent = currentReveal ? "Hide" : "Reveal";
+    updateTurnDisplays();
   });
 
   // Teams listener
@@ -209,8 +243,10 @@ function subscribeToGame(code) {
 }
 
 function renderTeams(teams) {
+  teamsById = new Map(teams.map(t => [t.id, t]));
   if (!teams.length) {
     teamsList.innerHTML = `<div class="muted small">No teams yet.</div>`;
+    updateTurnDisplays();
     return;
   }
   teamsList.innerHTML = "";
@@ -267,6 +303,7 @@ function renderTeams(teams) {
     wrap.appendChild(btns);
     teamsList.appendChild(wrap);
   }
+  updateTurnDisplays();
 }
 
 // ---------- Actions ----------
@@ -341,7 +378,8 @@ async function setNewWord() {
     turnIndex: 0,
     activeTeamId: firstTeamId,
     offeredPoints: 10,
-    attemptedTeamIds: []
+    attemptedTeamIds: [],
+    turnEndsAt: new Date(Date.now() + 30000)
   });
 }
 
@@ -370,17 +408,18 @@ async function skipOrIncorrect() {
     const nextIdx = Math.min(idx + 1, order.length - 1);
     const nextTeamId = order[nextIdx];
 
-    // points: 10 -> 9 -> 8 ... clamp to 1
-    const nextPts = Math.max(1, pts - 1);
+    // points: 10 -> 9 -> 8 ... clamp to 0
+    const nextPts = Math.max(0, pts - 1);
 
     // If we're already at the last team and they skip too, you can decide what happens.
-    // Here: just stay on last team but keep pts at 1.
+    // Here: just stay on last team but keep pts at 0 minimum.
     const stuckAtEnd = idx >= order.length - 1;
     tx.update(gref, {
       attemptedTeamIds: nextAttempted,
       turnIndex: stuckAtEnd ? idx : nextIdx,
       activeTeamId: stuckAtEnd ? curTeam : nextTeamId,
-      offeredPoints: stuckAtEnd ? Math.max(1, pts) : nextPts
+      offeredPoints: stuckAtEnd ? Math.max(0, pts - 1) : nextPts,
+      turnEndsAt: new Date(Date.now() + 30000)
     });
   });
 }
@@ -398,7 +437,7 @@ async function markCorrect() {
     if (!g.roundActive || g.solvedByTeamId) return;
 
     const teamId = g.activeTeamId;
-    const pts = Math.max(1, g.offeredPoints ?? 10);
+    const pts = Math.max(0, g.offeredPoints ?? 10);
     if (!teamId) return;
 
     const tref = doc(db, "games", gameId, "teams", teamId);
@@ -413,7 +452,8 @@ async function markCorrect() {
     // close round
     tx.update(gref, {
       solvedByTeamId: teamId,
-      roundActive: false
+      roundActive: false,
+      turnEndsAt: null
     });
   });
 }
@@ -516,6 +556,20 @@ btnResetScores.onclick = resetScores;
 
 btnSaveCustom.onclick = saveCustomFromUI;
 btnClearLocal.onclick = clearLocalCustom;
+
+setInterval(() => {
+  const msLeft = turnDeadline ? turnDeadline.getTime() - Date.now() : null;
+  updateCountdownUI(msLeft);
+
+  if (!roundActive || solvedByTeamId || !activeTeamId || !turnDeadline) return;
+  if (msLeft !== null && msLeft <= 0) {
+    const key = `${activeTeamId}:${turnIndex}:${turnDeadline.getTime()}:${offeredPoints}`;
+    if (lastAutoSkipKey !== key) {
+      lastAutoSkipKey = key;
+      skipOrIncorrect();
+    }
+  }
+}, 400);
 
 // ---------- Boot ----------
 onAuthStateChanged(auth, async () => {
