@@ -38,6 +38,7 @@ const timerStatusEl = document.getElementById("timerStatus");
 
 const wordDisplay = document.getElementById("wordDisplay");
 const wordMeta = document.getElementById("wordMeta");
+const syncStatusEl = document.getElementById("syncStatus");
 const btnNewWord = document.getElementById("btnNewWord");
 const btnReveal = document.getElementById("btnReveal");
 const btnPause = document.getElementById("btnPause");
@@ -209,6 +210,7 @@ function subscribeToGame(code) {
   gameId = code;
   lastWordUpdatedAt = null;
   elGameCode.textContent = code || "—";
+  if (syncStatusEl) syncStatusEl.textContent = "";
 
   if (!code) {
     wordDisplay.textContent = "—";
@@ -284,6 +286,12 @@ function subscribeToGame(code) {
       const t = updatedAt ? `Updated ${fmtTime(data.wordUpdatedAt)}` : "";
       wordMeta.textContent = t;
       btnReveal.textContent = currentReveal ? "Hide" : "Reveal";
+      if (syncStatusEl) {
+        const statusTs = updatedAt ? fmtTime(data.wordUpdatedAt) : null;
+        syncStatusEl.textContent = statusTs
+          ? `Synced from Firestore at ${statusTs}`
+          : "Waiting for Firestore sync...";
+      }
     }
     updateTurnDisplays();
   });
@@ -395,6 +403,7 @@ async function joinGame(code) {
 async function setNewWord() {
   if (!gameId) return alert("Create or join a game first.");
   await ensureSignedIn();
+  if (syncStatusEl) syncStatusEl.textContent = "Requesting a new word...";
 
   // Load teams, sort by score asc; ties random
   const { getDocs } = await import("https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js");
@@ -421,25 +430,33 @@ async function setNewWord() {
   const order = teams.map(t => t.id);
   const firstTeamId = order[0];
 
-  await updateDoc(gameDocRef(gameId), {
-    currentWord: pickWord(),
-    wordUpdatedAt: serverTimestamp(),
-    reveal: true,
+  try {
+    await updateDoc(gameDocRef(gameId), {
+      currentWord: pickWord(),
+      wordUpdatedAt: serverTimestamp(),
+      reveal: true,
 
-    // round fields
-    roundActive: true,
-    solvedByTeamId: null,
-    turnOrder: order,
-    turnIndex: 0,
-    activeTeamId: firstTeamId,
-    offeredPoints: 10,
-    attemptedTeamIds: [],
-    turnStartedAt: serverTimestamp(),
-    turnDurationMs: 30000,
-    turnPaused: false,
-    pausedRemainingMs: null,
-    turnEndsAt: null
-  });
+      // round fields
+      roundActive: true,
+      solvedByTeamId: null,
+      turnOrder: order,
+      turnIndex: 0,
+      activeTeamId: firstTeamId,
+      offeredPoints: 10,
+      attemptedTeamIds: [],
+      turnStartedAt: serverTimestamp(),
+      turnDurationMs: 30000,
+      turnPaused: false,
+      pausedRemainingMs: null,
+      turnEndsAt: null
+    });
+    if (syncStatusEl) syncStatusEl.textContent = "New word sent to Firestore. Waiting for sync...";
+  } catch (err) {
+    console.error("Failed to set new word", err);
+    const msg = err?.message || "Unknown error";
+    if (syncStatusEl) syncStatusEl.textContent = `New word failed: ${msg}`;
+    alert("Could not set a new word. Check your connection or Firestore rules and try again.\n\n" + msg);
+  }
 }
 
 async function skipOrIncorrect() {
