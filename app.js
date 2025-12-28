@@ -40,6 +40,7 @@ const wordDisplay = document.getElementById("wordDisplay");
 const wordMeta = document.getElementById("wordMeta");
 const btnNewWord = document.getElementById("btnNewWord");
 const btnReveal = document.getElementById("btnReveal");
+const btnPause = document.getElementById("btnPause");
 
 const teamName = document.getElementById("teamName");
 const btnAddTeam = document.getElementById("btnAddTeam");
@@ -74,6 +75,8 @@ let solvedByTeamId = null;
 let turnDeadline = null;
 let teamsById = new Map();
 let lastAutoSkipKey = null;
+let turnPaused = false;
+let pausedRemainingMs = null;
 
 // ---------- Helpers ----------
 function randomGameCode() {
@@ -145,21 +148,30 @@ function fmtTime(ts) {
 }
 
 function updateCountdownUI(msLeft) {
-  if (!roundActive || !activeTeamId || !turnDeadline) {
+  if (!roundActive || !activeTeamId) {
     turnTimerEl.textContent = "—";
     timerStatusEl.textContent = roundActive ? "Waiting for turn..." : "Timer idle.";
     return;
   }
 
-  const remaining = Math.max(0, msLeft ?? (turnDeadline.getTime() - Date.now()));
+  const remaining = (() => {
+    if (turnPaused) {
+      const pausedMs = pausedRemainingMs ?? (turnDeadline ? Math.max(0, turnDeadline.getTime() - Date.now()) : null);
+      return pausedMs ?? 0;
+    }
+    const liveMs = msLeft ?? (turnDeadline ? turnDeadline.getTime() - Date.now() : null);
+    return Math.max(0, liveMs ?? 0);
+  })();
   const totalSeconds = Math.floor(remaining / 1000);
   const mins = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
   const secs = String(totalSeconds % 60).padStart(2, "0");
 
   turnTimerEl.textContent = `${mins}:${secs}`;
-  timerStatusEl.textContent = remaining <= 0
-    ? "Time's up! Auto-skipping..."
-    : "Turns auto-skip after 30s.";
+  timerStatusEl.textContent = turnPaused
+    ? "Timer paused."
+    : (remaining <= 0
+      ? "Time's up! Auto-skipping..."
+      : "Turns auto-skip after 30s.");
 }
 
 function updateTurnDisplays() {
@@ -168,6 +180,13 @@ function updateTurnDisplays() {
     : (activeTeamId || "—");
   activeTeamDisplay.textContent = roundActive ? teamName : "—";
   updateCountdownUI();
+  updatePauseButton();
+}
+
+function updatePauseButton() {
+  if (!btnPause) return;
+  btnPause.textContent = turnPaused ? "Resume" : "Pause";
+  btnPause.disabled = !roundActive;
 }
 
 // ---------- Firestore paths ----------
@@ -213,6 +232,8 @@ function subscribeToGame(code) {
       turnOrder = Array.isArray(data.turnOrder) ? data.turnOrder : [];
       attemptedTeamIds = Array.isArray(data.attemptedTeamIds) ? data.attemptedTeamIds : [];
       solvedByTeamId = data.solvedByTeamId || null;
+      turnPaused = data.turnPaused === true;
+      pausedRemainingMs = typeof data.pausedRemainingMs === "number" ? data.pausedRemainingMs : null;
 
       // Allow either Firestore Timestamp objects or plain millisecond numbers
       // so countdown keeps running even if the field was serialized differently.
@@ -387,7 +408,9 @@ async function setNewWord() {
     activeTeamId: firstTeamId,
     offeredPoints: 10,
     attemptedTeamIds: [],
-    turnEndsAt: new Date(Date.now() + 30000)
+    turnEndsAt: new Date(Date.now() + 30000),
+    turnPaused: false,
+    pausedRemainingMs: null
   });
 }
 
@@ -424,7 +447,9 @@ async function skipOrIncorrect() {
       turnIndex: nextIdx,
       activeTeamId: nextTeamId,
       offeredPoints: nextPts,
-      turnEndsAt: new Date(Date.now() + 30000)
+      turnEndsAt: new Date(Date.now() + 30000),
+      turnPaused: false,
+      pausedRemainingMs: null
     });
   });
 }
@@ -433,6 +458,7 @@ async function markCorrect() {
   if (!gameId) return;
   await ensureSignedIn();
 
+  let awarded = false;
   await runTransaction(db, async (tx) => {
     const gref = gameDocRef(gameId);
     const gsnap = await tx.get(gref);
@@ -458,9 +484,53 @@ async function markCorrect() {
     tx.update(gref, {
       solvedByTeamId: teamId,
       roundActive: false,
-      turnEndsAt: null
+      turnEndsAt: null,
+      turnPaused: false,
+      pausedRemainingMs: null
     });
+
+    awarded = true;
   });
+
+  if (awarded) {
+    await setNewWord();
+  }
+}
+
+async function pauseTimer() {
+  if (!gameId || !roundActive || !activeTeamId) return;
+  await ensureSignedIn();
+
+  const msLeft = turnPaused
+    ? (pausedRemainingMs ?? 0)
+    : (turnDeadline ? Math.max(0, turnDeadline.getTime() - Date.now()) : 0);
+
+  await updateDoc(gameDocRef(gameId), {
+    turnPaused: true,
+    pausedRemainingMs: msLeft,
+    turnEndsAt: null
+  });
+}
+
+async function resumeTimer() {
+  if (!gameId || !roundActive || !activeTeamId) return;
+  await ensureSignedIn();
+
+  const remaining = pausedRemainingMs ?? 30000;
+
+  await updateDoc(gameDocRef(gameId), {
+    turnPaused: false,
+    pausedRemainingMs: null,
+    turnEndsAt: new Date(Date.now() + Math.max(0, remaining))
+  });
+}
+
+function togglePause() {
+  if (turnPaused) {
+    resumeTimer();
+  } else {
+    pauseTimer();
+  }
 }
 
 async function toggleReveal() {
@@ -541,6 +611,7 @@ function clearLocalCustom() {
 // ---------- Wire up ----------
 btnSkip.onclick = skipOrIncorrect;
 btnCorrect.onclick = markCorrect;
+btnPause.onclick = togglePause;
 
 btnCreate.onclick = createGame;
 btnCopyLink.onclick = async () => {
@@ -566,7 +637,7 @@ setInterval(() => {
   const msLeft = turnDeadline ? turnDeadline.getTime() - Date.now() : null;
   updateCountdownUI(msLeft);
 
-  if (!roundActive || solvedByTeamId || !activeTeamId || !turnDeadline) return;
+  if (!roundActive || solvedByTeamId || !activeTeamId || turnPaused || !turnDeadline) return;
   if (msLeft !== null && msLeft <= 0) {
     const key = `${activeTeamId}:${turnIndex}:${turnDeadline.getTime()}:${offeredPoints}`;
     if (lastAutoSkipKey !== key) {
