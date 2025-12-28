@@ -219,13 +219,6 @@ function renderTeams(teams) {
     //wrap.className = "team";
     wrap.className = "team" + (t.id === activeTeamId ? " active" : "");
 
-    if (t.id === activeTeamId && roundActive && !solvedByTeamId) {
-      const badge = document.createElement("span");
-      badge.className = "badge";
-      badge.textContent = `TURN • ${offeredPoints} pts`;
-      name.appendChild(badge);
-    }
-
     const left = document.createElement("div");
     left.style.minWidth = "0";
 
@@ -233,6 +226,13 @@ function renderTeams(teams) {
     name.className = "name";
     name.textContent = t.name || "(unnamed)";
     name.title = t.name || "";
+
+    if (t.id === activeTeamId && roundActive && !solvedByTeamId) {
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.textContent = `TURN • ${offeredPoints} pts`;
+      name.appendChild(badge);
+    }
 
     const score = document.createElement("div");
     score.className = "score";
@@ -305,7 +305,7 @@ async function setNewWord() {
   await ensureSignedIn();
 
   // Load teams, sort by score asc; ties random
-  const { getDocs } = await import("https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js");
+  const { getDocs } = await import("https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js");
   const qs = await getDocs(teamsColRef(gameId));
   const teams = [];
   qs.forEach(d => teams.push({ id: d.id, ...d.data() }));
