@@ -73,6 +73,8 @@ let turnOrder = [];
 let attemptedTeamIds = [];
 let solvedByTeamId = null;
 let turnDeadline = null;
+let turnStartAt = null;
+let turnDurationMs = null;
 let teamsById = new Map();
 let lastAutoSkipKey = null;
 let turnPaused = false;
@@ -237,12 +239,23 @@ function subscribeToGame(code) {
 
       // Allow either Firestore Timestamp objects or plain millisecond numbers
       // so countdown keeps running even if the field was serialized differently.
-      const rawDeadline = data.turnEndsAt;
-      turnDeadline = rawDeadline
-        ? (typeof rawDeadline.toDate === "function"
-            ? rawDeadline.toDate()
-            : new Date(rawDeadline))
+      const rawStart = data.turnStartedAt ?? data.turnEndsAt; // legacy fallback
+      turnStartAt = rawStart
+        ? (typeof rawStart.toDate === "function"
+            ? rawStart.toDate()
+            : new Date(rawStart))
         : null;
+      turnDurationMs = typeof data.turnDurationMs === "number" ? data.turnDurationMs : null;
+
+      // Compute deadline using server-anchored start time when available.
+      // If duration is missing but legacy turnEndsAt exists, fall back to that value.
+      turnDeadline = (turnStartAt && turnDurationMs !== null)
+        ? new Date(turnStartAt.getTime() + Math.max(0, turnDurationMs))
+        : (data.turnEndsAt
+            ? (typeof data.turnEndsAt.toDate === "function"
+                ? data.turnEndsAt.toDate()
+                : new Date(data.turnEndsAt))
+            : null);
 
       if (!roundActive) {
           turnInfo.textContent = "Round inactive. Hit “New Word” to start.";
@@ -408,9 +421,11 @@ async function setNewWord() {
     activeTeamId: firstTeamId,
     offeredPoints: 10,
     attemptedTeamIds: [],
-    turnEndsAt: new Date(Date.now() + 30000),
+    turnStartedAt: serverTimestamp(),
+    turnDurationMs: 30000,
     turnPaused: false,
-    pausedRemainingMs: null
+    pausedRemainingMs: null,
+    turnEndsAt: null
   });
 }
 
@@ -447,9 +462,11 @@ async function skipOrIncorrect() {
       turnIndex: nextIdx,
       activeTeamId: nextTeamId,
       offeredPoints: nextPts,
-      turnEndsAt: new Date(Date.now() + 30000),
+      turnStartedAt: serverTimestamp(),
+      turnDurationMs: 30000,
       turnPaused: false,
-      pausedRemainingMs: null
+      pausedRemainingMs: null,
+      turnEndsAt: null
     });
   });
 }
@@ -484,6 +501,8 @@ async function markCorrect() {
     tx.update(gref, {
       solvedByTeamId: teamId,
       roundActive: false,
+      turnStartedAt: null,
+      turnDurationMs: null,
       turnEndsAt: null,
       turnPaused: false,
       pausedRemainingMs: null
@@ -508,6 +527,8 @@ async function pauseTimer() {
   await updateDoc(gameDocRef(gameId), {
     turnPaused: true,
     pausedRemainingMs: msLeft,
+    turnStartedAt: null,
+    turnDurationMs: null,
     turnEndsAt: null
   });
 }
@@ -521,7 +542,9 @@ async function resumeTimer() {
   await updateDoc(gameDocRef(gameId), {
     turnPaused: false,
     pausedRemainingMs: null,
-    turnEndsAt: new Date(Date.now() + Math.max(0, remaining))
+    turnStartedAt: serverTimestamp(),
+    turnDurationMs: Math.max(0, remaining),
+    turnEndsAt: null
   });
 }
 
