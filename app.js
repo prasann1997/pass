@@ -344,7 +344,21 @@ async function createGame() {
     hostUid: auth.currentUser?.uid || null,
     currentWord: "Press New Word",
     wordUpdatedAt: serverTimestamp(),
-    reveal: true
+    reveal: true,
+
+    // Default round/timer fields so the host immediately sees them in Firestore
+    roundActive: false,
+    solvedByTeamId: null,
+    turnOrder: [],
+    turnIndex: 0,
+    activeTeamId: null,
+    offeredPoints: 0,
+    attemptedTeamIds: [],
+    turnStartedAt: null,
+    turnDurationMs: null,
+    turnPaused: false,
+    pausedRemainingMs: null,
+    turnEndsAt: null
   });
   setURLGame(code);
   subscribeToGame(code);
