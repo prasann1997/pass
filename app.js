@@ -413,20 +413,17 @@ async function skipOrIncorrect() {
     const attempted = Array.isArray(g.attemptedTeamIds) ? g.attemptedTeamIds : [];
     const nextAttempted = curTeam ? [...new Set([...attempted, curTeam])] : attempted;
 
-    const nextIdx = Math.min(idx + 1, order.length - 1);
+    const nextIdx = (idx + 1) % order.length;
     const nextTeamId = order[nextIdx];
 
     // points: 10 -> 9 -> 8 ... clamp to 0
     const nextPts = Math.max(0, pts - 1);
 
-    // If we're already at the last team and they skip too, you can decide what happens.
-    // Here: just stay on last team but keep pts at 0 minimum.
-    const stuckAtEnd = idx >= order.length - 1;
     tx.update(gref, {
       attemptedTeamIds: nextAttempted,
-      turnIndex: stuckAtEnd ? idx : nextIdx,
-      activeTeamId: stuckAtEnd ? curTeam : nextTeamId,
-      offeredPoints: stuckAtEnd ? Math.max(0, pts - 1) : nextPts,
+      turnIndex: nextIdx,
+      activeTeamId: nextTeamId,
+      offeredPoints: nextPts,
       turnEndsAt: new Date(Date.now() + 30000)
     });
   });
