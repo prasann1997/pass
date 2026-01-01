@@ -426,6 +426,26 @@ async function handleThemeChange() {
   }
 }
 
+async function ensureGameFields(code) {
+  const ref = gameDocRef(code);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return false;
+
+  const data = snap.data() || {};
+  const updates = {};
+
+  if (!("theme" in data)) updates.theme = DEFAULT_THEME;
+  if (!("reveal" in data)) updates.reveal = true;
+  if (!("currentWord" in data)) updates.currentWord = "Press New Word";
+  if (!("wordUpdatedAt" in data)) updates.wordUpdatedAt = serverTimestamp();
+
+  if (!Object.keys(updates).length) return true;
+
+  updates.updatedBy = currentUid();
+  await setDoc(ref, updates, { merge: true });
+  return true;
+}
+
 async function createGame() {
   if (btnCreate.disabled) return;
   btnCreate.disabled = true;
@@ -462,6 +482,7 @@ async function joinGame(code) {
     alert("Game code not found. Ask the host to create it first.");
     return;
   }
+  await ensureGameFields(code);
   setURLGame(code);
   subscribeToGame(code);
 }
