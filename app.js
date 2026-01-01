@@ -21,6 +21,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+const ERROR_HELP = "Check the console for the full Firebase error object, including request IDs.";
 
 // ---------- UI ----------
 const elGameCode = document.getElementById("gameCode");
@@ -171,6 +172,22 @@ function pickWord(themeKey = DEFAULT_THEME) {
   const list = getWordsForTheme(themeKey);
   if (!list.length) return "NO_WORDS";
   return list[Math.floor(Math.random() * list.length)];
+}
+
+function describeFirestoreError(err) {
+  if (!err) return "Unknown error";
+  const parts = [];
+  if (err.code) parts.push(`code: ${err.code}`);
+  if (err.status) parts.push(`status: ${err.status}`);
+  if (err.message) parts.push(err.message);
+  if (err.details) parts.push(err.details);
+  return parts.join(" | ") || "Unknown Firestore error";
+}
+
+function handleActionError(actionLabel, err) {
+  const message = describeFirestoreError(err);
+  console.error(`Failed to ${actionLabel}`, err);
+  alert(`Could not ${actionLabel}. ${message}. ${ERROR_HELP}`);
 }
 
 function getThemeLabel(themeKey) {
@@ -397,8 +414,12 @@ async function handleThemeChange() {
   currentTheme = selected;
 
   if (!gameId) return;
-  await ensureSignedIn();
-  await updateDoc(gameDocRef(gameId), { theme: selected });
+  try {
+    await ensureSignedIn();
+    await updateDoc(gameDocRef(gameId), { theme: selected });
+  } catch (err) {
+    handleActionError("update the theme", err);
+  }
 }
 
 async function createGame() {
@@ -421,8 +442,7 @@ async function createGame() {
     setURLGame(code);
     subscribeToGame(code);
   } catch (err) {
-    console.error("Failed to create game", err);
-    alert("Could not create a new game. Please try again.");
+    handleActionError("create a new game", err);
   } finally {
     btnCreate.disabled = false;
     btnCreate.textContent = "Create New Game";
@@ -443,70 +463,94 @@ async function joinGame(code) {
 
 async function setNewWord() {
   if (!gameId) return alert("Create or join a game first.");
-  await ensureSignedIn();
-  await updateDoc(gameDocRef(gameId), {
-    currentWord: pickWord(currentTheme),
-    wordUpdatedAt: serverTimestamp(),
-    reveal: true
-  });
+  try {
+    await ensureSignedIn();
+    await updateDoc(gameDocRef(gameId), {
+      currentWord: pickWord(currentTheme),
+      wordUpdatedAt: serverTimestamp(),
+      reveal: true
+    });
+  } catch (err) {
+    handleActionError("set a new word", err);
+  }
 }
 
 async function toggleReveal() {
   if (!gameId) return;
-  await ensureSignedIn();
-  await updateDoc(gameDocRef(gameId), {
-    reveal: !currentReveal
-  });
+  try {
+    await ensureSignedIn();
+    await updateDoc(gameDocRef(gameId), {
+      reveal: !currentReveal
+    });
+  } catch (err) {
+    handleActionError("toggle the word visibility", err);
+  }
 }
 
 // Atomic score update: transaction
 async function adjustScore(teamDocId, delta) {
   if (!gameId) return;
-  await ensureSignedIn();
-  const ref = doc(db, "games", gameId, "teams", teamDocId);
-  await runTransaction(db, async (tx) => {
-    const snap = await tx.get(ref);
-    if (!snap.exists()) return;
-    const cur = snap.data().score ?? 0;
-    tx.update(ref, { score: cur + delta });
-  });
+  try {
+    await ensureSignedIn();
+    const ref = doc(db, "games", gameId, "teams", teamDocId);
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) return;
+      const cur = snap.data().score ?? 0;
+      tx.update(ref, { score: cur + delta });
+    });
+  } catch (err) {
+    handleActionError("update the score", err);
+  }
 }
 
 async function addTeam() {
   if (!gameId) return alert("Create or join a game first.");
-  await ensureSignedIn();
-  const name = (teamName.value || "").trim();
-  if (!name) return;
-  await addDoc(teamsColRef(gameId), {
-    name,
-    score: 0,
-    createdAt: serverTimestamp()
-  });
+  try {
+    await ensureSignedIn();
+    const name = (teamName.value || "").trim();
+    if (!name) return;
+    await addDoc(teamsColRef(gameId), {
+      name,
+      score: 0,
+      createdAt: serverTimestamp()
+    });
+  } catch (err) {
+    handleActionError("add the team", err);
+  }
   teamName.value = "";
   teamName.focus();
 }
 
 async function removeTeam(teamDocId) {
   if (!gameId) return;
-  await ensureSignedIn();
-  const { deleteDoc } = await import("https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js");
-  await deleteDoc(doc(db, "games", gameId, "teams", teamDocId));
+  try {
+    await ensureSignedIn();
+    const { deleteDoc } = await import("https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js");
+    await deleteDoc(doc(db, "games", gameId, "teams", teamDocId));
+  } catch (err) {
+    handleActionError("remove the team", err);
+  }
 }
 
 async function resetScores() {
   if (!gameId) return;
   if (!confirm("Reset all scores to 0?")) return;
-  await ensureSignedIn();
+  try {
+    await ensureSignedIn();
 
-  // simple approach: read teams list from current DOM state is not reliable;
-  // best: query snapshot once then transaction per doc (small n teams)
-  const { getDocs } = await import("https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js");
-  const qs = await getDocs(teamsColRef(gameId));
-  const promises = [];
-  qs.forEach((d) => {
-    promises.push(updateDoc(d.ref, { score: 0 }));
-  });
-  await Promise.all(promises);
+    // simple approach: read teams list from current DOM state is not reliable;
+    // best: query snapshot once then transaction per doc (small n teams)
+    const { getDocs } = await import("https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js");
+    const qs = await getDocs(teamsColRef(gameId));
+    const promises = [];
+    qs.forEach((d) => {
+      promises.push(updateDoc(d.ref, { score: 0 }));
+    });
+    await Promise.all(promises);
+  } catch (err) {
+    handleActionError("reset all scores", err);
+  }
 }
 
 // ---------- Wire up ----------
