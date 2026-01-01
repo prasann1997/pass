@@ -402,19 +402,31 @@ async function handleThemeChange() {
 }
 
 async function createGame() {
-  await ensureSignedIn();
-  const selectedTheme = themeSelect.value || DEFAULT_THEME;
-  const code = randomGameCode();
-  await setDoc(gameDocRef(code), {
-    createdAt: serverTimestamp(),
-    currentWord: "Press New Word",
-    wordUpdatedAt: serverTimestamp(),
-    reveal: true,
-    theme: selectedTheme
-  });
-  currentTheme = selectedTheme;
-  setURLGame(code);
-  subscribeToGame(code);
+  if (btnCreate.disabled) return;
+  btnCreate.disabled = true;
+  btnCreate.textContent = "Creating…";
+
+  try {
+    await ensureSignedIn();
+    const selectedTheme = themeSelect.value || DEFAULT_THEME;
+    const code = randomGameCode();
+    await setDoc(gameDocRef(code), {
+      createdAt: serverTimestamp(),
+      currentWord: "Press New Word",
+      wordUpdatedAt: serverTimestamp(),
+      reveal: true,
+      theme: selectedTheme
+    });
+    currentTheme = selectedTheme;
+    setURLGame(code);
+    subscribeToGame(code);
+  } catch (err) {
+    console.error("Failed to create game", err);
+    alert("Could not create a new game. Please try again.");
+  } finally {
+    btnCreate.disabled = false;
+    btnCreate.textContent = "Create New Game";
+  }
 }
 
 async function joinGame(code) {
