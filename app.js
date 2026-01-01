@@ -408,6 +408,10 @@ async function ensureSignedIn() {
   await signInAnonymously(auth);
 }
 
+function currentUid() {
+  return auth.currentUser?.uid || null;
+}
+
 async function handleThemeChange() {
   if (suppressThemeChange) return;
   const selected = themeSelect.value || DEFAULT_THEME;
@@ -416,7 +420,7 @@ async function handleThemeChange() {
   if (!gameId) return;
   try {
     await ensureSignedIn();
-    await updateDoc(gameDocRef(gameId), { theme: selected });
+    await updateDoc(gameDocRef(gameId), { theme: selected, updatedBy: currentUid() });
   } catch (err) {
     handleActionError("update the theme", err);
   }
@@ -433,6 +437,7 @@ async function createGame() {
     const code = randomGameCode();
     await setDoc(gameDocRef(code), {
       createdAt: serverTimestamp(),
+      hostUid: currentUid(),
       currentWord: "Press New Word",
       wordUpdatedAt: serverTimestamp(),
       reveal: true,
@@ -468,7 +473,8 @@ async function setNewWord() {
     await updateDoc(gameDocRef(gameId), {
       currentWord: pickWord(currentTheme),
       wordUpdatedAt: serverTimestamp(),
-      reveal: true
+      reveal: true,
+      updatedBy: currentUid()
     });
   } catch (err) {
     handleActionError("set a new word", err);
@@ -480,7 +486,8 @@ async function toggleReveal() {
   try {
     await ensureSignedIn();
     await updateDoc(gameDocRef(gameId), {
-      reveal: !currentReveal
+      reveal: !currentReveal,
+      updatedBy: currentUid()
     });
   } catch (err) {
     handleActionError("toggle the word visibility", err);
@@ -513,7 +520,8 @@ async function addTeam() {
     await addDoc(teamsColRef(gameId), {
       name,
       score: 0,
-      createdAt: serverTimestamp()
+      createdAt: serverTimestamp(),
+      createdByUid: currentUid()
     });
   } catch (err) {
     handleActionError("add the team", err);
