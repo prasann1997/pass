@@ -34,28 +34,109 @@ const wordDisplay = document.getElementById("wordDisplay");
 const wordMeta = document.getElementById("wordMeta");
 const btnNewWord = document.getElementById("btnNewWord");
 const btnReveal = document.getElementById("btnReveal");
+const themeSelect = document.getElementById("themeSelect");
 
 const teamName = document.getElementById("teamName");
 const btnAddTeam = document.getElementById("btnAddTeam");
 const teamsList = document.getElementById("teamsList");
 const btnResetScores = document.getElementById("btnResetScores");
 
-// ---------- Local-only word list ----------
-const BUILTIN_WORDS = [
-  "apple","bridge","castle","doctor","river","planet","shadow","rocket","thunder","window",
-  "camera","pencil","whisper","jungle","marble","pirate","ladder","ocean","pillow","dragon",
-  "guitar","forest","diamond","painter","volcano","butter","wallet","cactus","tunnel","garden"
-];
+// ---------- Local-only word lists by theme ----------
+const THEMES = {
+  classic: {
+    label: "Classic",
+    words: [
+      "apple","bridge","castle","doctor","river","planet","shadow","rocket","thunder","window",
+      "camera","pencil","whisper","jungle","marble","pirate","ladder","ocean","pillow","dragon",
+      "guitar","forest","diamond","painter","volcano","butter","wallet","cactus","tunnel","garden"
+    ]
+  },
+  holidays: {
+    label: "Holidays",
+    words: [
+      "parade","fireworks","vacation","beach","family","feast","tradition","festival","lantern","bonfire",
+      "costume","celebration","gathering","laughter","memories","postcard","souvenir","flight","roadtrip","picnic",
+      "campfire","carnival","music","decorations","confetti","gifts","turkey","pumpkin","snowflake","carols"
+    ]
+  },
+  birthdays: {
+    label: "Birthdays",
+    words: [
+      "birthday","candles","cake","balloons","party","presents","streamers","cupcakes","surprise","wishes",
+      "frosting","confetti","invitation","banner","milestone","playlist","guestlist","pinata","sparkler","bouquet",
+      "centerpiece","ribbon","gratitude","laughter","keepsake","cheers","backdrop","goodiebag","sweets","celebrate"
+    ]
+  },
+  halloween: {
+    label: "Halloween",
+    words: [
+      "pumpkin","spooky","ghost","witch","candy","haunted","costume","cobweb","moonlight","broomstick",
+      "cauldron","graveyard","zombie","vampire","skeleton","mask","lantern","midnight","foggy","howl",
+      "cackle","bat","werewolf","monster","treats","trickster","shadow","casket","eerie","fright"
+    ]
+  },
+  christmas: {
+    label: "Christmas",
+    words: [
+      "tree","ornament","stocking","snowflake","gingerbread","sleigh","reindeer","elves","mistletoe","carols",
+      "wrapping","presents","chimney","holly","wreath","tinsel","candles","bells","cookies","nutcracker",
+      "northpole","wishlist","winter","cocoa","snowman","garland","sparkle","midnight","star","joy"
+    ]
+  },
+  newyear: {
+    label: "New Year",
+    words: [
+      "countdown","fireworks","resolutions","champagne","toast","midnight","confetti","balldrop","calendar","celebration",
+      "cheers","streamers","resolution","sparkler","party","goals","freshstart","clocktower","balloon","fanfare",
+      "parade","timesquare","hope","motivation","gratitude","tradition","newbeginnings","planner","horizon","wish"
+    ]
+  },
+  valentines: {
+    label: "Valentine's Day",
+    words: [
+      "hearts","roses","chocolate","romance","cupid","valentine","bouquet","candles","dinner","handwritten",
+      "poem","embrace","kisses","sweetheart","lovenote","giftbox","balloons","tulips","promise","keepsake",
+      "affection","admire","sparkle","gratitude","together","hug","compliment","cherish","devotion","spark"
+    ]
+  },
+  sports: {
+    label: "Sports",
+    words: [
+      "soccer","basketball","baseball","tennis","golf","hockey","football","swimming","cycling","running",
+      "marathon","coach","whistle","stadium","athlete","scoreboard","referee","goal","tournament","fitness",
+      "practice","medal","champion","teamwork","victory","training","playoffs","lineup","bleachers","uniform"
+    ]
+  },
+  music: {
+    label: "Music",
+    words: [
+      "melody","harmony","rhythm","chorus","verse","bridge","songwriter","guitar","piano","drums",
+      "bassline","orchestra","conductor","microphone","amplifier","concert","backstage","playlist","headphones","singer",
+      "choir","karaoke","lyric","tempo","keychange","metronome","symphony","soloist","ballad","festival"
+    ]
+  },
+  movies: {
+    label: "Movies",
+    words: [
+      "director","screenplay","cinema","popcorn","premiere","redcarpet","trailer","soundtrack","actor","actress",
+      "camera","clapper","scene","script","storyboard","villain","hero","sequel","franchise","credits",
+      "montage","blockbuster","indiefilm","costume","stunt","animation","dialogue","plottwist","cinematography","marquee"
+    ]
+  }
+};
+const DEFAULT_THEME = "classic";
 
 // ---------- Game state ----------
 let gameId = getGameIdFromURL();
 let unsubGame = null;
 let unsubTeams = null;
 let currentReveal = true;
+let currentTheme = DEFAULT_THEME;
 let latestTeams = [];
 let lastScoreChangeAt = 0;
 let delayedReorderTimer = null;
 const SCORE_REORDER_DELAY = 5000;
+let suppressThemeChange = false;
 
 // ---------- Helpers ----------
 function randomGameCode() {
@@ -80,9 +161,20 @@ function getGameIdFromURL() {
   return sanitizeCode(url.searchParams.get("game") || "");
 }
 
-function pickWord() {
-  if (BUILTIN_WORDS.length === 0) return "NO_WORDS";
-  return BUILTIN_WORDS[Math.floor(Math.random() * BUILTIN_WORDS.length)];
+function getWordsForTheme(themeKey) {
+  const list = THEMES[themeKey]?.words;
+  const fallback = THEMES[DEFAULT_THEME].words;
+  return Array.isArray(list) && list.length ? list : fallback;
+}
+
+function pickWord(themeKey = DEFAULT_THEME) {
+  const list = getWordsForTheme(themeKey);
+  if (!list.length) return "NO_WORDS";
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+function getThemeLabel(themeKey) {
+  return THEMES[themeKey]?.label || THEMES[DEFAULT_THEME].label;
 }
 
 function fmtTime(ts) {
@@ -92,6 +184,23 @@ function fmtTime(ts) {
   } catch {
     return "";
   }
+}
+
+function populateThemeSelect() {
+  themeSelect.innerHTML = "";
+  Object.entries(THEMES).forEach(([key, info]) => {
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = info.label;
+    themeSelect.appendChild(opt);
+  });
+  syncThemeSelect(DEFAULT_THEME);
+}
+
+function syncThemeSelect(themeKey) {
+  suppressThemeChange = true;
+  themeSelect.value = THEMES[themeKey] ? themeKey : DEFAULT_THEME;
+  suppressThemeChange = false;
 }
 
 // ---------- Firestore paths ----------
@@ -139,10 +248,15 @@ function subscribeToGame(code) {
     }
     const data = snap.data();
     currentReveal = data.reveal !== false;
+    const nextTheme = THEMES[data.theme] ? data.theme : DEFAULT_THEME;
+    currentTheme = nextTheme;
+    syncThemeSelect(nextTheme);
     const w = data.currentWord || "—";
     wordDisplay.textContent = currentReveal ? w : "••••••";
     const t = data.wordUpdatedAt ? `Updated ${fmtTime(data.wordUpdatedAt)}` : "";
-    wordMeta.textContent = t;
+    const metaParts = [`Theme: ${getThemeLabel(nextTheme)}`];
+    if (t) metaParts.push(t);
+    wordMeta.textContent = metaParts.join(" • ");
     btnReveal.textContent = currentReveal ? "Hide" : "Reveal";
   });
 
@@ -277,15 +391,28 @@ async function ensureSignedIn() {
   await signInAnonymously(auth);
 }
 
+async function handleThemeChange() {
+  if (suppressThemeChange) return;
+  const selected = themeSelect.value || DEFAULT_THEME;
+  currentTheme = selected;
+
+  if (!gameId) return;
+  await ensureSignedIn();
+  await updateDoc(gameDocRef(gameId), { theme: selected });
+}
+
 async function createGame() {
   await ensureSignedIn();
+  const selectedTheme = themeSelect.value || DEFAULT_THEME;
   const code = randomGameCode();
   await setDoc(gameDocRef(code), {
     createdAt: serverTimestamp(),
     currentWord: "Press New Word",
     wordUpdatedAt: serverTimestamp(),
-    reveal: true
+    reveal: true,
+    theme: selectedTheme
   });
+  currentTheme = selectedTheme;
   setURLGame(code);
   subscribeToGame(code);
 }
@@ -306,7 +433,7 @@ async function setNewWord() {
   if (!gameId) return alert("Create or join a game first.");
   await ensureSignedIn();
   await updateDoc(gameDocRef(gameId), {
-    currentWord: pickWord(),
+    currentWord: pickWord(currentTheme),
     wordUpdatedAt: serverTimestamp(),
     reveal: true
   });
@@ -371,6 +498,9 @@ async function resetScores() {
 }
 
 // ---------- Wire up ----------
+populateThemeSelect();
+currentTheme = themeSelect.value || DEFAULT_THEME;
+
 btnCreate.onclick = createGame;
 btnCopyLink.onclick = async () => {
   if (!gameId) return alert("Create or join a game first.");
@@ -381,6 +511,7 @@ btnCopyLink.onclick = async () => {
 btnJoin.onclick = () => joinGame(sanitizeCode(joinInput.value));
 btnNewWord.onclick = setNewWord;
 btnReveal.onclick = toggleReveal;
+themeSelect.onchange = handleThemeChange;
 
 btnAddTeam.onclick = addTeam;
 teamName.addEventListener("keydown", (e) => {
