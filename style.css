@@ -186,13 +186,15 @@ button.danger{
   box-shadow: 0 10px 18px rgba(42,35,70,.10);
 }
 
+.team > div:first-child{
+  flex: 1;
+  min-width: 0;
+}
+
 .team .name{
   font-weight: 900;
   font-size: 18px;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-  max-width: 55%;
+  word-break: break-word;
 }
 
 .team .score{
