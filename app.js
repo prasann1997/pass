@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import {
   getFirestore, doc, setDoc, updateDoc, serverTimestamp,
-  collection, addDoc, onSnapshot, query, orderBy, runTransaction, getDoc
+  collection, addDoc, onSnapshot, query, runTransaction, getDoc
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import {
   getAuth, signInAnonymously, onAuthStateChanged
@@ -52,6 +52,10 @@ let gameId = getGameIdFromURL();
 let unsubGame = null;
 let unsubTeams = null;
 let currentReveal = true;
+let latestTeams = [];
+let lastScoreChangeAt = 0;
+let delayedReorderTimer = null;
+const SCORE_REORDER_DELAY = 5000;
 
 // ---------- Helpers ----------
 function randomGameCode() {
@@ -93,6 +97,12 @@ function fmtTime(ts) {
 // ---------- Firestore paths ----------
 function gameDocRef(code) { return doc(db, "games", code); }
 function teamsColRef(code) { return collection(db, "games", code, "teams"); }
+function clearDelayedReorderTimer() {
+  if (delayedReorderTimer) {
+    clearTimeout(delayedReorderTimer);
+    delayedReorderTimer = null;
+  }
+}
 
 // ---------- Realtime subscriptions ----------
 function unsubscribeAll() {
@@ -100,10 +110,12 @@ function unsubscribeAll() {
   if (unsubTeams) unsubTeams();
   unsubGame = null;
   unsubTeams = null;
+  clearDelayedReorderTimer();
 }
 
 function subscribeToGame(code) {
   unsubscribeAll();
+  resetTeamState();
   gameId = code;
   elGameCode.textContent = code || "—";
 
@@ -111,6 +123,7 @@ function subscribeToGame(code) {
     wordDisplay.textContent = "—";
     teamsList.innerHTML = "";
     elShareHint.textContent = "";
+    resetTeamState();
     return;
   }
 
@@ -134,11 +147,11 @@ function subscribeToGame(code) {
   });
 
   // Teams listener
-  const qTeams = query(teamsColRef(code), orderBy("score", "desc"));
+  const qTeams = query(teamsColRef(code));
   unsubTeams = onSnapshot(qTeams, (qs) => {
     const teams = [];
     qs.forEach(d => teams.push({ id: d.id, ...d.data() }));
-    renderTeams(teams);
+    handleTeamsUpdate(teams);
   });
 }
 
@@ -195,6 +208,67 @@ function renderTeams(teams) {
     wrap.appendChild(btns);
     teamsList.appendChild(wrap);
   }
+}
+
+function handleTeamsUpdate(teams) {
+  const scoresChanged = didScoresChange(teams);
+  latestTeams = teams;
+
+  if (scoresChanged) {
+    lastScoreChangeAt = Date.now();
+    scheduleDelayedScoreReorder();
+  }
+
+  renderTeams(getDisplayTeams());
+}
+
+function didScoresChange(nextTeams) {
+  if (!latestTeams.length) return false;
+  if (nextTeams.length !== latestTeams.length) return true;
+  const prevScores = new Map(latestTeams.map((t) => [t.id, t.score ?? 0]));
+  return nextTeams.some((t) => (t.score ?? 0) !== (prevScores.get(t.id) ?? 0));
+}
+
+function getDisplayTeams() {
+  return shouldSortByScore()
+    ? getTeamsOrderedByScore(latestTeams)
+    : getTeamsByCreatedAt(latestTeams);
+}
+
+function shouldSortByScore() {
+  if (!lastScoreChangeAt) return true;
+  return (Date.now() - lastScoreChangeAt) >= SCORE_REORDER_DELAY;
+}
+
+function scheduleDelayedScoreReorder() {
+  clearDelayedReorderTimer();
+  delayedReorderTimer = setTimeout(() => {
+    renderTeams(getTeamsOrderedByScore(latestTeams));
+    delayedReorderTimer = null;
+  }, SCORE_REORDER_DELAY);
+}
+
+function getTeamsOrderedByScore(list) {
+  return [...list].sort((a, b) => {
+    const diff = (b.score ?? 0) - (a.score ?? 0);
+    if (diff !== 0) return diff;
+    return getCreatedAtMs(a) - getCreatedAtMs(b);
+  });
+}
+
+function getTeamsByCreatedAt(list) {
+  return [...list].sort((a, b) => getCreatedAtMs(a) - getCreatedAtMs(b));
+}
+
+function getCreatedAtMs(team) {
+  const ms = team.createdAt?.toMillis?.();
+  return typeof ms === "number" ? ms : 0;
+}
+
+function resetTeamState() {
+  latestTeams = [];
+  lastScoreChangeAt = 0;
+  clearDelayedReorderTimer();
 }
 
 // ---------- Actions ----------
