@@ -140,8 +140,8 @@ button.secondary{
 }
 
 button.good{
-  background: linear-gradient(135deg, var(--blue), #6ee0c5);
-  box-shadow: 0 10px 18px rgba(103,227,197,.20);
+  background: linear-gradient(135deg, var(--blue), var(--pink));
+  box-shadow: 0 10px 18px rgba(255,134,200,.20);
 }
 
 button.danger{
