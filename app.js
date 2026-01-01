@@ -170,23 +170,28 @@ function renderTeams(teams) {
     const btns = document.createElement("div");
     btns.className = "btns";
 
-    const plus = document.createElement("button");
-    plus.className = "good";
-    plus.textContent = "+1";
-    plus.onclick = () => adjustScore(t.id, +1);
+    const scoreButtons = [
+      { label: "+10", delta: 10, className: "good" },
+      { label: "+9", delta: 9, className: "good" },
+      { label: "+8", delta: 8, className: "good" },
+      { label: "+7", delta: 7, className: "good" },
+      { label: "+1", delta: 1, className: "good" },
+      { label: "−1", delta: -1, className: "danger" },
+    ];
 
-    const minus = document.createElement("button");
-    minus.className = "danger";
-    minus.textContent = "−1";
-    minus.onclick = () => adjustScore(t.id, -1);
+    for (const { label, delta, className } of scoreButtons) {
+      const btn = document.createElement("button");
+      btn.className = className;
+      btn.textContent = label;
+      btn.onclick = () => adjustScore(t.id, delta);
+      btns.appendChild(btn);
+    }
 
     const del = document.createElement("button");
     del.className = "secondary";
     del.textContent = "Remove";
     del.onclick = () => removeTeam(t.id);
 
-    btns.appendChild(plus);
-    btns.appendChild(minus);
     btns.appendChild(del);
 
     wrap.appendChild(left);
