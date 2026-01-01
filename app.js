@@ -172,9 +172,6 @@ function renderTeams(teams) {
 
     const scoreButtons = [
       { label: "+10", delta: 10, className: "good" },
-      { label: "+9", delta: 9, className: "good" },
-      { label: "+8", delta: 8, className: "good" },
-      { label: "+7", delta: 7, className: "good" },
       { label: "+1", delta: 1, className: "good" },
       { label: "−1", delta: -1, className: "danger" },
     ];
