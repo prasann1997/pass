@@ -420,10 +420,24 @@ async function handleThemeChange() {
   if (!gameId) return;
   try {
     await ensureSignedIn();
-    await updateDoc(gameDocRef(gameId), { theme: selected, updatedBy: currentUid() });
+    await ensureGameFields(gameId);
+    await applyUpdatesFieldwise(gameDocRef(gameId), { theme: selected, updatedBy: currentUid() }, "update the theme");
   } catch (err) {
     handleActionError("update the theme", err);
   }
+}
+
+async function applyUpdatesFieldwise(ref, updates, actionLabel) {
+  for (const [field, value] of Object.entries(updates)) {
+    try {
+      await updateDoc(ref, { [field]: value });
+    } catch (err) {
+      const label = `${actionLabel} (field: ${field})`;
+      handleActionError(label, err);
+      return false;
+    }
+  }
+  return true;
 }
 
 async function ensureGameFields(code) {
