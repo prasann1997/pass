@@ -60,8 +60,8 @@ const THEMES = {
       "campfire","carnival","music","decorations","confetti","gifts","turkey","pumpkin","snowflake","carols"
     ]
   },
-  birthdays: {
-    label: "Birthdays",
+  birthday: {
+    label: "Birthday",
     words: [
       "birthday","candles","cake","balloons","party","presents","streamers","cupcakes","surprise","wishes",
       "frosting","confetti","invitation","banner","milestone","playlist","guestlist","pinata","sparkler","bouquet",
@@ -429,6 +429,7 @@ async function handleThemeChange() {
 
 async function applyUpdatesFieldwise(ref, updates, actionLabel) {
   for (const [field, value] of Object.entries(updates)) {
+    console.log("Firestore update request", { action: actionLabel, path: ref.path, field, value });
     try {
       await updateDoc(ref, { [field]: value });
     } catch (err) {
@@ -469,6 +470,15 @@ async function createGame() {
     await ensureSignedIn();
     const selectedTheme = themeSelect.value || DEFAULT_THEME;
     const code = randomGameCode();
+    const payload = {
+      createdAt: serverTimestamp(),
+      hostUid: currentUid(),
+      currentWord: "Press New Word",
+      wordUpdatedAt: serverTimestamp(),
+      reveal: true,
+      theme: selectedTheme
+    };
+    console.log("Firestore create request", { action: "create game", code, payload });
     await setDoc(gameDocRef(code), {
       createdAt: serverTimestamp(),
       hostUid: currentUid(),
