@@ -16,7 +16,8 @@ service cloud.firestore {
         'valentines',
         'sports',
         'music',
-        'movies'
+        'movies',
+        'pop'
       ];
     }
 

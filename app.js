@@ -123,6 +123,14 @@ const BASE_THEMES = {
       "camera","clapper","scene","script","storyboard","villain","hero","sequel","franchise","credits",
       "montage","blockbuster","indiefilm","costume","stunt","animation","dialogue","plottwist","cinematography","marquee"
     ]
+  },
+  pop: {
+    label: "Pop Music",
+    words: [
+      "billboard","hitmaker","fanbase","superstar","boyband","diva","iconic","mainstream","earworm","catchy",
+      "autotune","streaming","viral","mashup","collab","remix","acoustic","unplugged","sellout","arena",
+      "groupie","encore","setlist","hype","dropbeat","trending","chartbuster","fanclub","superfan","lipsync"
+    ]
   }
 };
 
