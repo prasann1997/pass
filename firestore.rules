@@ -6,6 +6,7 @@ service cloud.firestore {
     function allowedThemes() {
       // Extend this list when adding new supported themes.
       return [
+        'common',
         'classic',
         'holidays',
         'birthday',
