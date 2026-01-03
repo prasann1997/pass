@@ -60,8 +60,8 @@ const THEMES = {
       "campfire","carnival","music","decorations","confetti","gifts","turkey","pumpkin","snowflake","carols"
     ]
   },
-  birthdays: {
-    label: "Birthdays",
+  birthday: {
+    label: "Birthday",
     words: [
       "birthday","candles","cake","balloons","party","presents","streamers","cupcakes","surprise","wishes",
       "frosting","confetti","invitation","banner","milestone","playlist","guestlist","pinata","sparkler","bouquet",
