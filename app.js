@@ -43,7 +43,7 @@ const teamsList = document.getElementById("teamsList");
 const btnResetScores = document.getElementById("btnResetScores");
 
 // ---------- Local-only word lists by theme ----------
-const THEMES = {
+const BASE_THEMES = {
   classic: {
     label: "Classic",
     words: [
@@ -125,7 +125,17 @@ const THEMES = {
     ]
   }
 };
-const DEFAULT_THEME = "classic";
+
+const COMMON_WORDS = [...new Set(Object.values(BASE_THEMES).flatMap((t) => t.words))];
+
+const THEMES = {
+  common: {
+    label: "Common",
+    words: COMMON_WORDS
+  },
+  ...BASE_THEMES
+};
+const DEFAULT_THEME = "common";
 
 // ---------- Game state ----------
 let gameId = getGameIdFromURL();
