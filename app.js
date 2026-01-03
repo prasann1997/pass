@@ -572,12 +572,19 @@ async function addTeam() {
     await ensureSignedIn();
     const name = (teamName.value || "").trim();
     if (!name) return;
+    console.log("Attempting to add team", {
+      gameId,
+      name,
+      uid: currentUid(),
+      teamsPath: teamsColRef(gameId).path
+    });
     await addDoc(teamsColRef(gameId), {
       name,
       score: 0,
       createdAt: serverTimestamp(),
       createdByUid: currentUid()
     });
+    console.log("Successfully added team document");
   } catch (err) {
     handleActionError("add the team", err);
   }
