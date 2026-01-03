@@ -53,7 +53,7 @@ service cloud.firestore {
     }
 
     function teamAllowedKeys() {
-      return ['name', 'score', 'createdAt'];
+      return ['name', 'score', 'createdAt', 'createdByUid'];
     }
 
     function validTeamData(data) {
@@ -64,7 +64,8 @@ service cloud.firestore {
         && data.score is int
         && data.score >= -999
         && data.score <= 999
-        && data.createdAt is timestamp;
+        && data.createdAt is timestamp
+        && (!('createdByUid' in data) || data.createdByUid is string || data.createdByUid == null);
     }
 
     match /games/{gameId} {
